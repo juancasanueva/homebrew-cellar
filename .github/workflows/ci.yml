@@ -74,9 +74,9 @@ jobs:
         run: |
           set -euo pipefail
           brew install --cask juancasanueva/cellar/home-cellar
-          test -d "/Applications/cellar.app"
+          test -d "/Applications/Home-Cellar.app"
           /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
-            "/Applications/cellar.app/Contents/Info.plist"
+            "/Applications/Home-Cellar.app/Contents/Info.plist"
 
       - name: Uninstall with a zap
         run: |
@@ -87,4 +87,4 @@ jobs:
           # completes, not that the inventory is complete. Completeness is
           # bound to the source by CaskZapInventoryTests in the app repository.
           brew uninstall --cask --zap juancasanueva/cellar/home-cellar
-          test ! -d "/Applications/cellar.app"
+          test ! -d "/Applications/Home-Cellar.app"

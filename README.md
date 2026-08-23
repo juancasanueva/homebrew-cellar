@@ -11,9 +11,9 @@ brew trust juancasanueva/cellar
 brew install --cask home-cellar
 ```
 
-That installs `/Applications/cellar.app` — the same notarized, stapled build the project's
+That installs `/Applications/Home-Cellar.app` — the same notarized, stapled build the project's
 [Releases](https://github.com/juancasanueva/SWIFTUI_cellar/releases) page serves. The bundle is named
-`cellar.app` in both channels; the app presents itself as **Home-Cellar**.
+`Home-Cellar.app` in both channels.
 
 Homebrew 6 refuses to load a cask from a non-official tap until the tap is trusted, which is what the
 middle line does. It grants nothing beyond this tap, and you can undo it with
@@ -26,11 +26,11 @@ naming the tap on the command line is itself the grant, so it needs no `brew tru
 brew install --cask juancasanueva/cellar/home-cellar
 ```
 
-### Already have `cellar.app` in `/Applications`?
+### Already have `Home-Cellar.app` in `/Applications`?
 
 Homebrew refuses to overwrite an app it did not place, so a copy installed from the zip stops the
-plain install with `It seems there is already an App at '/Applications/cellar.app'`. Let brew adopt
-the existing copy instead:
+plain install with `It seems there is already an App at '/Applications/Home-Cellar.app'`. Let brew
+adopt the existing copy instead:
 
 ```sh
 brew install --cask --adopt home-cellar
