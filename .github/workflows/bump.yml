@@ -1,0 +1,143 @@
+name: Bump
+
+# Keeps the cask current by pulling, never by being pushed to. The app
+# repository sends nothing, holds no credential for this one, and cannot fail
+# because of this workflow: a missed run costs at most one cron interval,
+# because the next run recomputes the same answer from scratch.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"      # four times a day
+  workflow_dispatch:            # the maintainer's immediate path
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          path: homebrew-cellar
+
+      - name: Read the latest published release
+        id: release
+        run: |
+          set -euo pipefail
+          # Anonymous on purpose: this reads a public release of a public
+          # repository, so it needs no token, no secret, and no cross-repository
+          # grant anywhere.
+          TAG="$(curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/juancasanueva/SWIFTUI_cellar/releases/latest" \
+            | jq -r '.tag_name // ""')"
+          test -n "$TAG"
+          VERSION="${TAG#v}"
+          # `releases/latest` never points at a prerelease. This is belt and
+          # braces: a hyphenated version must never become a cask version.
+          case "$VERSION" in
+            *-*) echo "::error::refusing to bump to prerelease ${VERSION}"; exit 1 ;;
+          esac
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Exit if the cask already declares that version
+        id: guard
+        working-directory: homebrew-cellar
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Idempotence is the whole point. Four scheduled runs a day must
+          # produce at most one commit per published release, which is also what
+          # keeps this compatible with "one stable release per commit" in the
+          # app repository.
+          if grep -qx "  version \"${VERSION}\"" "Casks/home-cellar.rb"; then
+            echo "the cask already declares ${VERSION}; nothing to do"
+            echo "bump=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "bump=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute the checksum of the published asset
+        if: steps.guard.outputs.bump == 'yes'
+        id: asset
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Downloaded from the documented URL rather than handed over by the
+          # release job. This proves the URL a stranger will use serves exactly
+          # these bytes; a digest computed on the build runner proves only that
+          # the build was built.
+          URL="https://github.com/juancasanueva/SWIFTUI_cellar/releases/download/v${VERSION}/Home-Cellar-${VERSION}.zip"
+          curl -fsSL -o "${RUNNER_TEMP}/asset.zip" "$URL"
+          SHA="$(shasum -a 256 "${RUNNER_TEMP}/asset.zip" | awk '{print $1}')"
+          test "${#SHA}" -eq 64
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Rewrite the two declared lines
+        if: steps.guard.outputs.bump == 'yes'
+        working-directory: homebrew-cellar
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          SHA: ${{ steps.asset.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          CASK="Casks/home-cellar.rb"
+          # Fail closed BEFORE editing: each stanza must occur exactly once, at
+          # the start of its own line. `url` interpolates `#{version}` and
+          # carries no literal version, so there is no second line either
+          # substitution could reach.
+          test "$(grep -c '^  version "' "$CASK")" -eq 1
+          test "$(grep -c '^  sha256 "' "$CASK")" -eq 1
+          /usr/bin/sed -i '' \
+            -e "s|^  version \"[^\"]*\"\$|  version \"${VERSION}\"|" \
+            -e "s|^  sha256 \"[^\"]*\"\$|  sha256 \"${SHA}\"|" \
+            "$CASK"
+          # And fail closed AFTER: the file now declares exactly what was
+          # measured, or this run stops before any gate and before any commit.
+          grep -qx "  version \"${VERSION}\"" "$CASK"
+          grep -qx "  sha256 \"${SHA}\"" "$CASK"
+          git --no-pager diff --stat
+
+      - name: Register the rewritten checkout as a real tap
+        if: steps.guard.outputs.bump == 'yes'
+        run: |
+          set -euo pipefail
+          TAPS="$(brew --repository)/Library/Taps/juancasanueva"
+          mkdir -p "$TAPS"
+          cp -R "$GITHUB_WORKSPACE/homebrew-cellar" "$TAPS/homebrew-cellar"
+
+      - name: Gate the rewrite before anything is committed
+        if: steps.guard.outputs.bump == 'yes'
+        run: |
+          set -euo pipefail
+          # A push made with GITHUB_TOKEN does not trigger other workflows, so
+          # ci.yml will never run on the commit this job is about to make.
+          # These are therefore not a second opinion — they are the only gates
+          # a bump commit ever gets, and they run while nothing is committed.
+          brew style juancasanueva/cellar
+          brew audit --cask juancasanueva/cellar/home-cellar
+          brew audit --cask --online --strict juancasanueva/cellar/home-cellar
+
+      - name: Commit the bump
+        if: steps.guard.outputs.bump == 'yes'
+        working-directory: homebrew-cellar
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/home-cellar.rb
+          git commit -m "chore(cask): home-cellar ${VERSION}"
+          git push origin main

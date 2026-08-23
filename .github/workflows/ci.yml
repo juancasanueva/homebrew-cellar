@@ -1,0 +1,90 @@
+name: CI
+
+# Every gate this tap has. A cask that installs is the only proof that a cask
+# installs, so the round trip runs on a real runner rather than being argued for
+# in a review.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cask:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Check out the tap
+        uses: actions/checkout@v5
+        with:
+          path: homebrew-cellar
+
+      - name: Record the runner image
+        run: |
+          set -euo pipefail
+          sw_vers
+          brew --version
+          uname -m
+          # `depends_on arch: :arm64` makes the install step unreachable on an
+          # Intel image, and an unreachable gate that reports success is worse
+          # than no gate. So the architecture is asserted, not assumed.
+          test "$(uname -m)" = "arm64"
+
+      - name: Register the checkout as a real tap
+        run: |
+          set -euo pipefail
+          # `brew style` and `brew audit` behave differently against a loose
+          # `.rb` path than against a tapped cask, and the loose path is the
+          # known source of "passes in CI, fails for a user".
+          #
+          # A copy, not `brew tap juancasanueva/cellar "$GITHUB_WORKSPACE/..."`:
+          # that form git-clones the checkout, and a clone resolves the source's
+          # HEAD, which `actions/checkout` leaves detached. CI would then audit a
+          # second resolution of the commit instead of the exact bytes under
+          # review.
+          TAPS="$(brew --repository)/Library/Taps/juancasanueva"
+          mkdir -p "$TAPS"
+          cp -R "$GITHUB_WORKSPACE/homebrew-cellar" "$TAPS/homebrew-cellar"
+          brew tap
+
+      - name: Style
+        run: brew style juancasanueva/cellar
+
+      - name: Audit, offline
+        run: brew audit --cask juancasanueva/cellar/home-cellar
+
+      - name: Audit, online and strict
+        # The gate that matters: it downloads the url and verifies the declared
+        # sha256 against the bytes GitHub actually serves, which is the one
+        # failure a user would otherwise meet first.
+        #
+        # `--new` is deliberately absent. It enforces homebrew/cask *submission*
+        # house rules that a third-party tap is entitled to ignore, and this tap
+        # is the channel precisely because submission is deferred.
+        run: brew audit --cask --online --strict juancasanueva/cellar/home-cellar
+
+      - name: Install
+        run: |
+          set -euo pipefail
+          brew install --cask juancasanueva/cellar/home-cellar
+          test -d "/Applications/cellar.app"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+            "/Applications/cellar.app/Contents/Info.plist"
+
+      - name: Uninstall with a zap
+        run: |
+          set -euo pipefail
+          # The zap paths are only syntactically exercised here — a runner has
+          # never launched the app, so it has nothing to delete. What this
+          # proves is that the stanza is well-formed and that the uninstall
+          # completes, not that the inventory is complete. Completeness is
+          # bound to the source by CaskZapInventoryTests in the app repository.
+          brew uninstall --cask --zap juancasanueva/cellar/home-cellar
+          test ! -d "/Applications/cellar.app"
