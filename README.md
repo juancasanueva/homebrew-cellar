@@ -26,6 +26,20 @@ naming the tap on the command line is itself the grant, so it needs no `brew tru
 brew install --cask juancasanueva/cellar/home-cellar
 ```
 
+### Already have `cellar.app` in `/Applications`?
+
+Homebrew refuses to overwrite an app it did not place, so a copy installed from the zip stops the
+plain install with `It seems there is already an App at '/Applications/cellar.app'`. Let brew adopt
+the existing copy instead:
+
+```sh
+brew install --cask --adopt home-cellar
+```
+
+Adoption keeps the bundle and its data where they are and records it as brew-managed. Because the
+cask declares `auto_updates`, brew does not compare versions before adopting — whatever Sparkle has
+updated the copy to is the copy it takes over.
+
 ## Requirements
 
 - macOS 26 (Tahoe) or later
