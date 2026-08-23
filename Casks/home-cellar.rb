@@ -1,6 +1,6 @@
 cask "home-cellar" do
-  version "1.1.0"
-  sha256 "a6d5c68d38eb6a9166e5eb06c6e0521f582415da74b6e372b558822507fe9e95"
+  version "1.2.0"
+  sha256 "3e2b5c89dd02449756d38f9f2c7001414063ab0adf2c0f85cbfe88184dcfe259"
 
   url "https://github.com/juancasanueva/SWIFTUI_cellar/releases/download/v#{version}/Home-Cellar-#{version}.zip"
   name "Home-Cellar"
@@ -17,7 +17,7 @@ cask "home-cellar" do
   depends_on macos: :tahoe
   depends_on arch: :arm64
 
-  app "cellar.app"
+  app "Home-Cellar.app"
 
   zap trash: [
     "~/Library/Application Support/com.juancasanueva.cellar",
