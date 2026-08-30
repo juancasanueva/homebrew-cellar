@@ -1,6 +1,6 @@
 cask "home-cellar" do
-  version "1.8.1"
-  sha256 "e723907ccd6908ddce8b20bac6db69a52e5bde1164858fa884099b3a84895e33"
+  version "1.8.2"
+  sha256 "f6eda6edbdc7e5db8600a41f77d4cd6370f934365eeb1d2eab78cd6e7ecb7c80"
 
   url "https://github.com/juancasanueva/SWIFTUI_cellar/releases/download/v#{version}/Home-Cellar-#{version}.zip"
   name "Home-Cellar"
